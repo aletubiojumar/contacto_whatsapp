@@ -1,43 +1,13 @@
 # Proyecto Allianz / ePAC
 
 ## Resumen
-Este proyecto automatiza todo el flujo Allianz a ePAC sin pasos manuales:
+Este proyecto automatiza todo el flujo para sacar los datos del asegurado sin pasos manuales:
 
-1. Consulta directa a **Peritoline (BD)** mediante una **query única en producción**.
-2. Generación directa del **Excel filtrado** (sin `filter_excel.py`).
+1. Consulta directa a **Peritoline (BD)** mediante una **query única**.
+2. Generación directa del **Excel filtrado**.
 3. Obtención de **credenciales ePAC desde BD** (tabla `softline_aseguradoras_claves_web`).
 4. Acceso a **ePAC con Playwright (headless)**.
 5. Navegación automática por peritaciones y **extracción de teléfonos**.
-
----
-
-## Cambios importantes (enero 2026)
-
-### Eliminado filtrado por Excel
-- `filter_excel.py` eliminado.
-- El filtrado se hace 100% en SQL.
-- El Excel ya sale listo para usar desde la BD.
-
-Columnas del Excel generado:
-- `Encargo`
-- `Fecha Sin.`
-- `Causa`
-- `Aseguradora`
-Tras la extracción de teléfonos se añaden las columnas `Teléfono` y `Estado`.
-
----
-
-## Script principal Allianz (BD a Excel)
-
-```bash
-python3 scripts/export_allianz_from_db.py
-```
-
-Este script:
-- Lee credenciales de BD desde `.env`.
-- Usa conexión MySQL con SSL compatible.
-- Ejecuta la query final de producción.
-- Genera el Excel final.
 
 ---
 
@@ -84,7 +54,6 @@ Fallback:
 --headless
 ```
 
-- No necesita XServer.
 - No se usa Playwright para Peritoline, **solo para ePAC**.
 
 ---
@@ -100,6 +69,10 @@ DB_PORT=
 DB_SSL_CA=
 DB_SSL_CERT=
 DB_SSL_KEY=
+
+PERITOLINE_LOGIN_URL=
+PERITOLINE_USERNAME=
+PERITOLINE_PASSWORD=
 ```
 
 Notas:
@@ -109,28 +82,3 @@ Notas:
 - SSL sin verificación estricta
 
 ---
-
-## Flujo completo recomendado
-
-```bash
-# 1. Generar Excel desde BD
-python3 scripts/export_allianz_from_db.py
-
-# 2. Extraer teléfonos desde ePAC
-python3 scripts/extraer_teléfonos_epac.py --headless
-```
-
----
-
-Sistema ahora determinista, reproducible y sin pasos manuales.
-Toda la lógica de negocio vive en la BD.
-Playwright solo se usa donde aporta valor (ePAC).
-
-## Estructura del proyecto
-- `scripts/export_allianz_from_db.py`: Exporta siniestros desde BD a Excel y puede ejecutar la extracción ePAC.
-- `scripts/extraer_teléfonos_epac.py`: Lee el Excel y extrae teléfonos desde ePAC.
-- `epac/pages/`: Page Objects necesarios para la navegación y extracción en ePAC.
-- `utils/`: Utilidades comunes de logging.
-- `config.py`: Carga de configuración y variables de entorno comunes.
-- `browser.py`: Lanzador de navegador Playwright.
-- `data/`: Archivos de salida (Excel y resúmenes).

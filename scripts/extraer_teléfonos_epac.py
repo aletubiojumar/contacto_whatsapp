@@ -2,7 +2,7 @@
 Extrae teléfonos desde ePAC para siniestros Allianz.
 
 Modos:
-- --refresh: borra excels existentes (raw_allianz) y descarga de nuevo desde Peritoline
+- --refresh: borra excels existentes (raw_allianz) y genera uno nuevo desde BD
 - --excel: usa un Excel existente (sin descargar)
 - --headless: ejecuta con navegador oculto (sin UI). Si no, con navegador visible.
 
@@ -26,9 +26,7 @@ from __future__ import annotations
 import argparse
 import os
 import re
-import shutil
 import sys
-import time
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING
@@ -48,7 +46,6 @@ from epac.pages.login_page import LoginPage
 from epac.pages.menu_lateral_page import MenuLateralPage
 from epac.pages.navigation_page import NavigationPage
 from epac.pages.num_siniestro_page import NumeroSiniestroPage
-from utils.human import human_delay
 from utils.logging_utils import get_logger, setup_logging
 
 # Importar mysql.connector para obtener credenciales de BD (sin Playwright)
@@ -154,77 +151,6 @@ def filtrar_siniestros_validos(lista: list[str], min_len: int = 9) -> list[str]:
             seen.add(x)
             out.append(x)
     return out
-
-
-# -----------------------------------------------------------------------------
-# Descarga + credenciales (Peritoline)
-# -----------------------------------------------------------------------------
-
-def _cerrar_popup_avisos_si_existe(page: Page, config: AppConfig) -> None:
-    """Cierra el popup de avisos si aparece en Peritoline.
-
-    Args:
-        page: Pagina activa de Playwright.
-        config: Configuración de la aplicación.
-
-    Returns:
-        None.
-
-    Notes:
-        Documentación pensada para MkDocs.
-    """
-    boton_ok = page.locator("button.swal2-confirm.swal2-styled:has-text('OK')")
-    try:
-        if boton_ok.is_visible():
-            human_delay(config, "Cerrando popup de avisos")
-            boton_ok.click()
-    except Exception:
-        return
-
-
-def descargar_excel_allianz(config: AppConfig) -> Path:
-    """Descarga el Excel de Allianz desde Peritoline.
-
-    Args:
-        config: Configuración de la aplicación.
-
-    Returns:
-        Ruta del Excel descargado.
-
-    Notes:
-        Documentación pensada para MkDocs.
-    """
-    logger = get_logger(tarea="descarga_excel")
-
-    # Lazy imports: solo si descargamos desde Peritoline
-    from browser import launch_browser
-    from peritoline.login_page import PeritolineLoginPage
-    from peritoline.downloader import download_report_in_session
-    RAW_DIR.mkdir(parents=True, exist_ok=True)
-
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_path = RAW_DIR / f"allianz_{timestamp}.xlsx"
-    latest_path = RAW_DIR / "allianz_latest.xlsx"
-
-    with launch_browser(config) as (_, page):
-        human_delay(config, "Login Peritoline")
-        login_page = PeritolineLoginPage(page)
-        login_page.open(config.peritoline_login_url)  # <- URL string, no config
-        login_page.login(config.peritoline_username, config.peritoline_password)
-        _cerrar_popup_avisos_si_existe(page, config)
-
-        download_report_in_session(
-            page,
-            config,
-            output_path,
-            "ALLIANZ",
-            click_view_all_button=True,
-            click_view_all_list=True,
-        )
-
-    shutil.copy2(output_path, latest_path)
-    logger.info(f"Excel descargado en: {output_path}")
-    return output_path
 
 
 def obtener_credenciales_epac(config: AppConfig) -> dict:
@@ -464,100 +390,6 @@ def volver_a_busqueda_desde_ficha(page: Page, config: AppConfig) -> None:
 
 
 # -----------------------------------------------------------------------------
-# Extracción teléfonos
-# -----------------------------------------------------------------------------
-
-PHONE_CANDIDATE_RE = re.compile(
-    r"""
-    (?:
-        (?:\+|00)\s*\d{1,3}[\s\-\.]?  # prefijo internacional
-    )?
-    \(?\d{1,4}\)?                    # área
-    [\s\-\.\,]*                      # separadores
-    \d{1,4}                          # grupo
-    [\s\-\.\,]*
-    \d{1,4}
-    (?:[\s\-\.\,]*\d{1,4})?
-    """,
-    re.VERBOSE,
-)
-
-
-def normalizar_telefono(s: str) -> Optional[str]:
-    """Normaliza teléfonos en formato español o internacional.
-
-    Args:
-        s: Valor de teléfono a normalizar.
-
-    Returns:
-        Teléfono normalizado o None si no es válido.
-
-    Notes:
-        Documentación pensada para MkDocs.
-    """
-    if not s:
-        return None
-
-    if s.startswith("+"):
-        digits = "+" + re.sub(r"\D", "", s[1:])
-    else:
-        digits = re.sub(r"\D", "", s)
-
-    if digits in ("", "+"):
-        return None
-
-    # España con +34
-    if digits.startswith("+34"):
-        rest = digits[3:]
-        if len(rest) == 9 and rest[0] in "6789":
-            return rest
-
-    # España con 34 sin +
-    if not digits.startswith("+") and digits.startswith("34") and len(digits) == 11 and digits[2] in "6789":
-        return digits[-9:]
-
-    # 0 delante
-    if not digits.startswith("+") and len(digits) == 10 and digits.startswith("0") and digits[1] in "6789":
-        return digits[1:]
-
-    # España directa
-    if not digits.startswith("+") and len(digits) == 9 and digits[0] in "6789":
-        return digits
-
-    # Internacional
-    if digits.startswith("+"):
-        if 10 <= len(digits) - 1 <= 15:
-            return digits
-        return None
-
-    if 10 <= len(digits) <= 15:
-        return digits
-
-    return None
-
-
-def extraer_telefono_de_texto(texto: str) -> Optional[str]:
-    """Extrae el primer teléfono válido detectado en un texto.
-
-    Args:
-        texto: Texto origen.
-
-    Returns:
-        Teléfono normalizado o None si no hay coincidencias.
-
-    Notes:
-        Documentación pensada para MkDocs.
-    """
-    if not texto:
-        return None
-    for m in PHONE_CANDIDATE_RE.finditer(texto):
-        tel = normalizar_telefono(m.group(0))
-        if tel:
-            return tel
-    return None
-
-
-# -----------------------------------------------------------------------------
 # Procesado por siniestro
 # -----------------------------------------------------------------------------
 
@@ -716,7 +548,7 @@ def main() -> None:
     parser.add_argument("--excel", nargs="?", const="__AUTO__", default=None,
                         help="Ruta a un Excel existente. Si se usa sin valor, se usará el último generado en RAW_DIR.")
     parser.add_argument("--refresh", action="store_true",
-                        help="Borra excels existentes en data/peritoline/raw_allianz y descarga uno nuevo.")
+                        help="Borra excels existentes en data/peritoline/raw_allianz y genera uno nuevo.")
     parser.add_argument("--headless", action="store_true",
                         help="Ejecutar en modo headless (sin abrir navegador). Si no se indica, se ve el navegador.")
     parser.add_argument("--min-siniestro-len", type=int, default=9,

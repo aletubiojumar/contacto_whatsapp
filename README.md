@@ -30,7 +30,7 @@ Tras la extracción de teléfonos se añaden las columnas `Teléfono` y `Estado`
 ## Script principal Allianz (BD a Excel)
 
 ```bash
-python3 scripts/export_allianz_from_db.py --out data/peritoline/raw_allianz/allianz_report_latest.xlsx
+python3 scripts/export_allianz_from_db.py
 ```
 
 Este script:
@@ -114,7 +114,7 @@ Notas:
 
 ```bash
 # 1. Generar Excel desde BD
-python3 scripts/export_allianz_from_db.py --out data/peritoline/raw_allianz/allianz_report_latest.xlsx
+python3 scripts/export_allianz_from_db.py
 
 # 2. Extraer teléfonos desde ePAC
 python3 scripts/extraer_teléfonos_epac.py --headless
@@ -127,10 +127,10 @@ Toda la lógica de negocio vive en la BD.
 Playwright solo se usa donde aporta valor (ePAC).
 
 ## Estructura del proyecto
-- `scripts/export_allianz_from_db.py`: Exporta siniestros desde BD a Excel y dispara la extracción ePAC.
+- `scripts/export_allianz_from_db.py`: Exporta siniestros desde BD a Excel y puede ejecutar la extracción ePAC.
 - `scripts/extraer_teléfonos_epac.py`: Lee el Excel y extrae teléfonos desde ePAC.
-- `peritoline/`: Integración con Peritoline, query y utilidades de extracción.
-- `epac/`: Page Objects y workflow para navegar ePAC.
+- `epac/pages/`: Page Objects necesarios para la navegación y extracción en ePAC.
+- `utils/`: Utilidades comunes de logging.
 - `config.py`: Carga de configuración y variables de entorno comunes.
 - `browser.py`: Lanzador de navegador Playwright.
 - `data/`: Archivos de salida (Excel y resúmenes).

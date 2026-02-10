@@ -9,18 +9,16 @@ Checklist inicial
 - Docker Desktop instalado y activo.
 - Imagen Docker construida localmente.
 - Carpeta local para `data/` y `logs/`.
-- `.env` local con credenciales de Peritoline.
+- `.env` local con credenciales de BD y ePAC si hiciera falta.
 
 Ejecucion local recomendada (manual)
 ```powershell
 docker run --rm ^
   --env-file C:\notas-reply\.env ^
-  -e PIPELINE_MODELO=241 ^
-  -e PIPELINE_SKIP_GENERALI=true ^
-  -e PIPELINE_PERITOS="MARIA VELAZQUEZ,ENRIQUE GONZALEZ,MIGUEL FUSTES" ^
   -v C:\notas-reply\logs:/app/logs ^
   -v C:\notas-reply\data:/app/data ^
-  notas-reply:latest
+  notas-reply:latest ^
+  bash -lc "python scripts/export_allianz_from_db.py && python scripts/extraer_teléfonos_epac.py --headless"
 ```
 
 Programador de tareas (Windows)
@@ -31,12 +29,12 @@ Programador de tareas (Windows)
 5) Programa: `powershell.exe`
 6) Argumentos:
 ```
--NoProfile -ExecutionPolicy Bypass -Command "docker run --rm --env-file C:\notas-reply\.env -e PIPELINE_MODELO=241 -e PIPELINE_SKIP_GENERALI=true -e PIPELINE_PERITOS=\"MARIA VELAZQUEZ,ENRIQUE GONZALEZ,MIGUEL FUSTES\" -v C:\notas-reply\logs:/app/logs -v C:\notas-reply\data:/app/data notas-reply:latest"
+-NoProfile -ExecutionPolicy Bypass -Command "docker run --rm --env-file C:\notas-reply\.env -v C:\notas-reply\logs:/app/logs -v C:\notas-reply\data:/app/data notas-reply:latest bash -lc \"python scripts/export_allianz_from_db.py && python scripts/extraer_teléfonos_epac.py --headless\""
 ```
 
 Monitoreo diario
 - Revisar `logs/app.log`.
-- Verificar que `data/pending_*.jsonl` se vacia tras ejecuciones OK.
+- Verificar que el Excel se actualiza con teléfonos.
 - Revisar tiempos de ejecucion (no mas de 20-30 min por ciclo).
 
 Criterios para pasar a EC2
@@ -60,25 +58,25 @@ Verificacion previa
 
 Cron recomendado
 ```cron
-0 8-22 * * * docker run --rm --env-file /opt/notas-reply/.env -e PIPELINE_MODELO=241 -e PIPELINE_SKIP_GENERALI=true -e PIPELINE_PERITOS="MARIA VELAZQUEZ,ENRIQUE GONZALEZ,MIGUEL FUSTES" -v /opt/notas-reply/logs:/app/logs -v /opt/notas-reply/data:/app/data <ACCOUNT_ID>.dkr.ecr.eu-north-1.amazonaws.com/notas-reply:latest
+0 8-22 * * * docker run --rm --env-file /opt/notas-reply/.env -v /opt/notas-reply/logs:/app/logs -v /opt/notas-reply/data:/app/data <ACCOUNT_ID>.dkr.ecr.eu-north-1.amazonaws.com/notas-reply:latest bash -lc "python scripts/export_allianz_from_db.py && python scripts/extraer_teléfonos_epac.py --headless"
 ```
 
 Supervision inicial (primeras 48h)
 - Revisar logs cada 3-4 horas.
-- Verificar que el pipeline se completa y que no quedan pendientes bloqueados.
+- Verificar que el flujo se completa sin bloqueos.
 - Ajustar `APP_SLOW_MO_MS` o `APP_HEADLESS` si hay fallos.
 
 ### Diagnostico rapido
 
 Si el flujo se queda en un portal
 - Revisar logs para el ultimo paso ejecutado.
-- Reintentar en la siguiente ejecucion (el pending conserva las notas).
+- Reintentar en la siguiente ejecucion.
 - Subir `APP_SLOW_MO_MS` y bajar el ritmo de ejecucion.
 
 Si falla el login
-- Confirmar credenciales de Peritoline.
+- Confirmar credenciales de BD y ePAC.
 - Verificar si hay captcha o bloqueo temporal.
-- El pipeline debe continuar con el siguiente portal.
+- El flujo debe continuar en la siguiente ejecucion.
 
 ### Registro de cambios
 

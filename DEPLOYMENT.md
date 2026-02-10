@@ -1,8 +1,7 @@
 # Guia de despliegue en EC2 (Amazon Linux) con Docker + ECR
 
-Esta guia explica como dockerizar, subir a ECR y ejecutar el pipeline en EC2
-cada hora de 08:00 a 22:00 (Europe/Stockholm). Incluye el modo inicial para
-generar JSONL dos veces seguidas y luego el cron normal.
+Esta guia explica como dockerizar, subir a ECR y ejecutar el flujo en EC2
+cada hora de 08:00 a 22:00 (Europe/Stockholm).
 
 ## 0) Requisitos previos
 
@@ -67,12 +66,20 @@ mkdir -p /opt/notas-reply/data
 Crea `/opt/notas-reply/.env` con estas variables:
 
 ```ini
-# Peritoline
-PERITOLINE_LOGIN_URL=...
-PERITOLINE_USERNAME=...
-PERITOLINE_PASSWORD=...
+# BD
+DB_HOST=
+DB_NAME=
+DB_USER=
+DB_PASS=
+DB_PORT=3306
+DB_SSL_CA=/app/certs/ca.pem
+DB_SSL_CERT=/app/certs/client-cert.pem
+DB_SSL_KEY=/app/certs/client-key.pem
 
-Nota: no se requieren credenciales ePAC en el .env, se leen desde Peritoline > Claves.
+# ePAC (solo si falla la lectura desde BD)
+EPAC_URL=
+EPAC_USERNAME=
+EPAC_PASSWORD=
 
 # Opcionales (recomendado)
 APP_HEADLESS=true
@@ -96,35 +103,18 @@ aws ecr get-login-password --region eu-north-1 | docker login --username AWS --p
 docker pull <ACCOUNT_ID>.dkr.ecr.eu-north-1.amazonaws.com/notas-reply:latest
 ```
 
-## 9) Ejecucion inicial (dos veces JSONL)
+## 9) Ejecucion manual del flujo
 
-La primera vez queremos generar JSONL dos veces seguidas:
 ```bash
 docker run --rm \
   --env-file /opt/notas-reply/.env \
-  -e PIPELINE_MODELO=241 \
-  -e PIPELINE_SKIP_GENERALI=true \
-  -e PIPELINE_PERITOS="MARIA VELAZQUEZ,ENRIQUE GONZALEZ,MIGUEL FUSTES" \
   -v /opt/notas-reply/logs:/app/logs \
   -v /opt/notas-reply/data:/app/data \
   <ACCOUNT_ID>.dkr.ecr.eu-north-1.amazonaws.com/notas-reply:latest \
-  bash -lc "python scripts/run_download_and_build_jsonl.py --modelo 241 --peritos \"MARIA VELAZQUEZ,ENRIQUE GONZALEZ,MIGUEL FUSTES\" && sleep 5 && python scripts/run_download_and_build_jsonl.py --modelo 241 --peritos \"MARIA VELAZQUEZ,ENRIQUE GONZALEZ,MIGUEL FUSTES\""
+  bash -lc "python scripts/export_allianz_from_db.py && python scripts/extraer_teléfonos_epac.py --headless"
 ```
 
-## 10) Ejecucion normal del pipeline (manual)
-
-```bash
-docker run --rm \
-  --env-file /opt/notas-reply/.env \
-  -e PIPELINE_MODELO=241 \
-  -e PIPELINE_SKIP_GENERALI=true \
-  -e PIPELINE_PERITOS="MARIA VELAZQUEZ,ENRIQUE GONZALEZ,MIGUEL FUSTES" \
-  -v /opt/notas-reply/logs:/app/logs \
-  -v /opt/notas-reply/data:/app/data \
-  <ACCOUNT_ID>.dkr.ecr.eu-north-1.amazonaws.com/notas-reply:latest
-```
-
-## 11) Programar cron (08:00 a 22:00)
+## 10) Programar cron (08:00 a 22:00)
 
 Configura zona horaria:
 ```bash
@@ -138,15 +128,15 @@ crontab -e
 
 Agrega:
 ```cron
-0 8-22 * * * docker run --rm --env-file /opt/notas-reply/.env -e PIPELINE_MODELO=241 -e PIPELINE_SKIP_GENERALI=true -e PIPELINE_PERITOS="MARIA VELAZQUEZ,ENRIQUE GONZALEZ,MIGUEL FUSTES" -v /opt/notas-reply/logs:/app/logs -v /opt/notas-reply/data:/app/data <ACCOUNT_ID>.dkr.ecr.eu-north-1.amazonaws.com/notas-reply:latest
+0 8-22 * * * docker run --rm --env-file /opt/notas-reply/.env -v /opt/notas-reply/logs:/app/logs -v /opt/notas-reply/data:/app/data <ACCOUNT_ID>.dkr.ecr.eu-north-1.amazonaws.com/notas-reply:latest bash -lc "python scripts/export_allianz_from_db.py && python scripts/extraer_teléfonos_epac.py --headless"
 ```
 
-## 12) Logs y datos
+## 11) Logs y datos
 
 - Logs: `/opt/notas-reply/logs`
-- Excel/JSONL/pending: `/opt/notas-reply/data`
+- Excel: `/opt/notas-reply/data`
 
-## 13) Actualizar a nueva version
+## 12) Actualizar a nueva version
 
 1. Build + push de imagen nueva (pasos 3 y 4).
 2. En EC2:

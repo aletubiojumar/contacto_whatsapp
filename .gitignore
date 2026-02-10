@@ -1,0 +1,47 @@
+# Entornos y dependencias
+.venv/
+venv/
+ENV/
+
+# Archivos de Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Configuracion sensible
+.env
+.env.*
+!.env.example
+
+# Configuracion del editor
+.vscode/
+
+# Datos locales
+data/*.jsonl
+data/peritoline/raw/*.xlsx
+data/peritoline/raw/*.xls
+data/peritoline/raw_allianz/*.xlsx
+data/peritoline/raw_allianz/*.xls
+data/peritoline/raw_generali/*.xlsx
+data/peritoline/raw_generali/*.xls
+data/peritoline/raw_ama/*.xlsx
+data/peritoline/raw_ama/*.xls
+
+# Salidas y artefactos
+*.log
+logs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+
+# Playwright y navegadores
+playwright-report/
+test-results/
+.playwright/
+
+# AWS
+.aws/
+aws/
